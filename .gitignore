@@ -1,0 +1,30 @@
+# Node modules
+node_modules/
+
+# Environments
+.env
+.env.local
+.env.*.local
+
+# Build output
+.next/
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Prisma
+backend/prisma/dev.db
+backend/prisma/dev.db-journal
+
+# Uploaded encrypted files (server only)
+backend/uploads/
+
+# OS
+.DS_Store
+Thumbs.db

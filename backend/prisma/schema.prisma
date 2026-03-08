@@ -1,0 +1,40 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  password_hash String
+  created_at    DateTime @default(now())
+  files         File[]   @relation("UserFiles")
+}
+
+model File {
+  id                  String      @id @default(uuid())
+  user_id             String
+  filename            String
+  encrypted_file_path String
+  iv                  String      // Initialization vector for decryption
+  created_at          DateTime    @default(now())
+  user                User        @relation(fields: [user_id], references: [id], name: "UserFiles")
+  shareLinks          ShareLink[] @relation("FileShareLinks")
+}
+
+model ShareLink {
+  id             String   @id @default(uuid())
+  token          String   @unique
+  file_id        String
+  expiry_time    DateTime
+  download_limit Int
+  download_count Int      @default(0)
+  file           File     @relation(fields: [file_id], references: [id], name: "FileShareLinks")
+}
