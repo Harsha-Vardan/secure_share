@@ -40,6 +40,7 @@ export default function Dashboard() {
     const [shareOptions, setShareOptions] = useState<Record<string, ShareOptions>>({});
     const [expandedShare, setExpandedShare] = useState<string | null>(null);
     const [creatingLink, setCreatingLink] = useState<string | null>(null);
+    const [shareError, setShareError] = useState<Record<string, string>>({});
     const [useChunked, setUseChunked] = useState(true);
 
     useEffect(() => {
@@ -118,6 +119,7 @@ export default function Dashboard() {
             }
 
             const exportedKey = await exportKey(key);
+            // encodeURIComponent so Base64 +/= chars don't break URLSearchParams parsing
             sessionStorage.setItem(`encryptionKey_${fileRecord.id}`, exportedKey);
 
             await fetchFiles();
@@ -145,6 +147,7 @@ export default function Dashboard() {
 
     const handleCreateLink = async (fileId: string) => {
         setCreatingLink(fileId);
+        setShareError(prev => ({ ...prev, [fileId]: '' }));
         try {
             const opts = getShareOptions(fileId);
             const res = await api.post('/share/create', {
@@ -156,15 +159,19 @@ export default function Dashboard() {
 
             const key = sessionStorage.getItem(`encryptionKey_${fileId}`);
             if (!key) {
-                alert('Encryption key unavailable for this session. Re-upload the file to generate a shareable link.');
+                setShareError(prev => ({
+                    ...prev,
+                    [fileId]: 'Encryption key unavailable — re-upload the file to get a shareable link.',
+                }));
                 return;
             }
 
-            const shareUrl = `${window.location.origin}/download/${res.data.token}#key=${key}`;
+            const shareUrl = `${window.location.origin}/download/${res.data.token}#key=${encodeURIComponent(key)}`;
             setShareTokens(prev => ({ ...prev, [fileId]: shareUrl }));
             setExpandedShare(null);
-        } catch {
-            alert('Failed to create share link');
+        } catch (err: any) {
+            const msg = err?.response?.data?.error || err?.message || 'Failed to create share link';
+            setShareError(prev => ({ ...prev, [fileId]: msg }));
         } finally {
             setCreatingLink(null);
         }
@@ -176,8 +183,10 @@ export default function Dashboard() {
             await api.delete(`/files/${id}`);
             fetchFiles();
             setShareTokens(prev => { const n = { ...prev }; delete n[id]; return n; });
-        } catch {
-            alert('Failed to delete file');
+            setShareError(prev => { const n = { ...prev }; delete n[id]; return n; });
+        } catch (err: any) {
+            const msg = err?.response?.data?.error || err?.message || 'Failed to delete file';
+            alert(`Delete failed: ${msg}`);
         }
     };
 
@@ -358,78 +367,17 @@ export default function Dashboard() {
 
                                         {/* Actions */}
                                         <div className="flex items-center gap-2">
-                                            {shareTokens[file.id] ? (
-                                                <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-lg max-w-[220px]">
-                                                    <input
-                                                        readOnly value={shareTokens[file.id]}
-                                                        className="bg-transparent text-xs w-full text-white/40 outline-none truncate"
-                                                    />
-                                                    <button
-                                                        onClick={() => {
-                                                            navigator.clipboard.writeText(shareTokens[file.id]);
-                                                        }}
-                                                        className="text-blue-400 hover:text-blue-300 text-xs font-medium shrink-0"
-                                                    >
-                                                        Copy
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <div className="relative">
-                                                    <button
-                                                        onClick={() => setExpandedShare(expandedShare === file.id ? null : file.id)}
-                                                        className="px-3 py-1.5 flex items-center gap-1.5 text-sm text-white/50 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-all"
-                                                    >
-                                                        <LinkIcon size={14} /> Share
-                                                        {expandedShare === file.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                                                    </button>
-
-                                                    {expandedShare === file.id && (
-                                                        <div className="absolute right-0 top-full mt-2 w-64 bg-[#111118] border border-white/10 rounded-xl shadow-2xl p-4 z-20 space-y-3">
-                                                            <p className="text-xs font-semibold text-white/60 uppercase tracking-wider">Link Options</p>
-
-                                                            <div>
-                                                                <label className="text-xs text-white/40 mb-1 block flex items-center gap-1"><Clock size={10} /> Expiry (hours)</label>
-                                                                <input
-                                                                    type="number" min={1} max={720}
-                                                                    value={getShareOptions(file.id).expiryHours}
-                                                                    onChange={e => updateShareOption(file.id, 'expiryHours', parseInt(e.target.value))}
-                                                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-blue-500/50"
-                                                                />
-                                                            </div>
-
-                                                            <div>
-                                                                <label className="text-xs text-white/40 mb-1 block">Max Downloads</label>
-                                                                <input
-                                                                    type="number" min={1} max={100}
-                                                                    value={getShareOptions(file.id).downloadLimit}
-                                                                    onChange={e => updateShareOption(file.id, 'downloadLimit', parseInt(e.target.value))}
-                                                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-blue-500/50"
-                                                                />
-                                                            </div>
-
-                                                            <div>
-                                                                <label className="text-xs text-white/40 mb-1 block flex items-center gap-1"><Lock size={10} /> Password (optional)</label>
-                                                                <input
-                                                                    type="password"
-                                                                    placeholder="Leave blank for no password"
-                                                                    value={getShareOptions(file.id).password}
-                                                                    onChange={e => updateShareOption(file.id, 'password', e.target.value)}
-                                                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-blue-500/50 placeholder:text-white/20"
-                                                                />
-                                                            </div>
-
-                                                            <button
-                                                                onClick={() => handleCreateLink(file.id)}
-                                                                disabled={!!creatingLink}
-                                                                className="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm rounded-lg font-medium transition-all flex items-center justify-center gap-2"
-                                                            >
-                                                                {creatingLink === file.id ? <Loader2 size={14} className="animate-spin" /> : <LinkIcon size={14} />}
-                                                                Generate Link
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
+                                            <button
+                                                onClick={() => setExpandedShare(expandedShare === file.id ? null : file.id)}
+                                                className={`px-3 py-1.5 flex items-center gap-1.5 text-sm border rounded-lg transition-all ${
+                                                    expandedShare === file.id
+                                                        ? 'text-blue-400 bg-blue-500/10 border-blue-500/30'
+                                                        : 'text-white/50 bg-white/5 hover:bg-white/10 border-white/10'
+                                                }`}
+                                            >
+                                                <LinkIcon size={14} /> Share
+                                                {expandedShare === file.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                            </button>
 
                                             <button
                                                 onClick={() => handleDelete(file.id)}
@@ -440,6 +388,88 @@ export default function Dashboard() {
                                             </button>
                                         </div>
                                     </div>
+
+                                    {/* ── Inline Share Panel (no overflow clipping) ── */}
+                                    {expandedShare === file.id && !shareTokens[file.id] && (
+                                        <div className="mt-4 bg-white/[0.03] border border-white/10 rounded-xl p-4 space-y-3">
+                                            <p className="text-xs font-semibold text-white/50 uppercase tracking-wider">Link Options</p>
+
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="text-xs text-white/40 mb-1 flex items-center gap-1"><Clock size={10} /> Expiry (hours)</label>
+                                                    <input
+                                                        type="number" min={1} max={720}
+                                                        value={getShareOptions(file.id).expiryHours}
+                                                        onChange={e => updateShareOption(file.id, 'expiryHours', parseInt(e.target.value))}
+                                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-blue-500/50"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs text-white/40 mb-1 block">Max Downloads</label>
+                                                    <input
+                                                        type="number" min={1} max={100}
+                                                        value={getShareOptions(file.id).downloadLimit}
+                                                        onChange={e => updateShareOption(file.id, 'downloadLimit', parseInt(e.target.value))}
+                                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-blue-500/50"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="text-xs text-white/40 mb-1 flex items-center gap-1"><Lock size={10} /> Password (optional)</label>
+                                                <input
+                                                    type="password"
+                                                    placeholder="Leave blank for no password"
+                                                    value={getShareOptions(file.id).password}
+                                                    onChange={e => updateShareOption(file.id, 'password', e.target.value)}
+                                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-blue-500/50 placeholder:text-white/20"
+                                                />
+                                            </div>
+
+                                            <button
+                                                onClick={() => handleCreateLink(file.id)}
+                                                disabled={!!creatingLink}
+                                                className="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm rounded-lg font-medium transition-all flex items-center justify-center gap-2"
+                                            >
+                                                {creatingLink === file.id ? <Loader2 size={14} className="animate-spin" /> : <LinkIcon size={14} />}
+                                                Generate Link
+                                            </button>
+                                            {shareError[file.id] && (
+                                                <p className="text-red-400 text-xs leading-snug">{shareError[file.id]}</p>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* ── Generated Share Link (inline, full-width) ── */}
+                                    {shareTokens[file.id] && (
+                                        <div className="mt-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4">
+                                            <p className="text-xs font-semibold text-emerald-400 mb-2 flex items-center gap-1.5">
+                                                <CheckCircle2 size={12} /> Share link ready — copy and send it
+                                            </p>
+                                            <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+                                                <input
+                                                    readOnly
+                                                    value={shareTokens[file.id]}
+                                                    className="bg-transparent text-xs flex-1 text-white/50 outline-none min-w-0"
+                                                    onClick={e => (e.target as HTMLInputElement).select()}
+                                                />
+                                                <button
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(shareTokens[file.id]);
+                                                    }}
+                                                    className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-all shrink-0"
+                                                >
+                                                    Copy
+                                                </button>
+                                            </div>
+                                            <button
+                                                onClick={() => setShareTokens(prev => { const n = { ...prev }; delete n[file.id]; return n; })}
+                                                className="mt-2 text-xs text-white/25 hover:text-white/40 transition-colors"
+                                            >
+                                                Generate new link
+                                            </button>
+                                        </div>
+                                    )}
                                 </li>
                             ))}
                         </ul>

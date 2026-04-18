@@ -10,6 +10,8 @@ import {
 interface LinkInfo {
     filename: string;
     file_size: number;
+    iv: string;
+    file_hash: string;
     expiry_time: string;
     downloads_remaining: number;
     password_protected: boolean;
@@ -70,13 +72,22 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
 
         try {
             // 1. Extract encryption key from URL fragment (never sent to server)
+            //    The key is encodeURIComponent'd to survive URLSearchParams parsing of Base64 +/=
             const hash = window.location.hash;
-            const keyParam = new URLSearchParams(hash.substring(1)).get('key');
-            if (!keyParam) throw new Error('Encryption key missing from URL. Share the full URL including the #key= fragment.');
+            const rawKeyParam = new URLSearchParams(hash.substring(1)).get('key');
+            if (!rawKeyParam) throw new Error('Encryption key missing from URL. Share the full URL including the #key= fragment.');
+            const keyParam = decodeURIComponent(rawKeyParam);
+
+            // Use pre-fetched linkInfo for filename, IV and hash — avoids CORS custom header issues
+            const fileName  = linkInfo?.filename || 'securely_shared_file';
+            const ivBase64  = linkInfo?.iv;
+            const serverHash = linkInfo?.file_hash;
+
+            if (!ivBase64) throw new Error('Initialization Vector missing — cannot decrypt. Re-share the file.');
 
             setProgress(20);
 
-            // 2. POST to download endpoint (password in body)
+            // 2. POST to download endpoint (password in body — gets the encrypted blob)
             const res = await fetch(`${BACKEND_URL}/share/download/${token}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -90,20 +101,14 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
 
             setProgress(50);
 
-            // 3. Read encrypted blob + headers
+            // 3. Read encrypted blob
             const encryptedBuffer = await res.arrayBuffer();
-            const fileName = decodeURIComponent(res.headers.get('x-file-name') || 'securely_shared_file');
-            const ivBase64 = res.headers.get('x-file-iv');
-            const serverHash = res.headers.get('x-file-hash');
-
-            if (!ivBase64) throw new Error('Missing Initialization Vector in response headers. Cannot decrypt.');
 
             setProgress(65);
 
             // 4. ── Integrity verification (before decryption) ──────────────
             if (serverHash) {
-                const actualHash = await window.crypto.subtle.digest('SHA-256', encryptedBuffer);
-                const actualHex = Array.from(new Uint8Array(actualHash))
+                const actualHex = Array.from(new Uint8Array(await window.crypto.subtle.digest('SHA-256', encryptedBuffer)))
                     .map(b => b.toString(16).padStart(2, '0')).join('');
                 const verified = await verifyIntegrity(encryptedBuffer, serverHash);
                 setIntegrityStatus(verified ? 'verified' : 'failed');
@@ -120,16 +125,17 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
 
             setProgress(95);
 
-            // 6. Trigger browser download
+            // 6. Trigger browser download with correct filename
             const objectUrl = URL.createObjectURL(decryptedFile);
             setDownloadedFile({ name: fileName, size: formatBytes(decryptedFile.size) });
 
             const a = document.createElement('a');
             a.href = objectUrl;
-            a.download = fileName;
+            a.download = fileName;  // correct original filename from DB
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
 
             setProgress(100);
 

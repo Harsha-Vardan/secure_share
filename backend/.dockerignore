@@ -1,0 +1,9 @@
+node_modules
+npm-debug.log*
+uploads
+logs
+.env
+*.md
+prisma/dev.db
+prisma/migrations
+.git
