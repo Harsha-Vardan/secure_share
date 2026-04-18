@@ -28,3 +28,6 @@ backend/uploads/
 # OS
 .DS_Store
 Thumbs.db
+
+# Documentation
+Interview_Guide.md
