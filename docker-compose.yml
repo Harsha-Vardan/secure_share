@@ -1,0 +1,65 @@
+version: "3.9"
+
+services:
+  # ── MongoDB ──────────────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7
+    container_name: secureshare-mongodb
+    restart: unless-stopped
+    ports:
+      - "27018:27017"           # Expose for local tools (Compass, mongosh)
+    environment:
+      MONGO_INITDB_DATABASE: secureshare
+    volumes:
+      - mongodb_data:/data/db   # Persistent data
+      - mongodb_config:/data/configdb
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Backend (Node.js / Express) ───────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: secureshare-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      PORT:          3001
+      MONGODB_URI:   mongodb://mongodb:27017/secureshare
+      JWT_SECRET:    ${JWT_SECRET:-change_this_jwt_secret_in_production}
+      FRONTEND_URL:  http://localhost:3000
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - backend_uploads:/app/uploads   # Persist uploaded files
+      - backend_logs:/app/logs         # Persist activity logs
+
+  # ── Frontend (Next.js) ────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_BACKEND_URL: http://localhost:3001   # Browser-facing URL
+    container_name: secureshare-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+    depends_on:
+      - backend
+
+# ── Named Volumes ─────────────────────────────────────────────────────────────
+volumes:
+  mongodb_data:
+  mongodb_config:
+  backend_uploads:
+  backend_logs:
