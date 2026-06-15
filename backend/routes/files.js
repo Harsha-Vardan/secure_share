@@ -55,7 +55,34 @@ router.get('/', authenticateToken, async (req, res) => {
         const files = await File.find({ user_id: req.user.id })
             .sort({ created_at: -1 })
             .select('id filename file_hash file_size chunk_count created_at');
-        res.json(files);
+
+        // Fetch associated share links for these files
+        const fileIds = files.map(f => f.id);
+        const shareLinks = await ShareLink.find({ file_id: { $in: fileIds } });
+
+        // Group share links by file_id
+        const linksByFile = {};
+        shareLinks.forEach(link => {
+            if (!linksByFile[link.file_id]) {
+                linksByFile[link.file_id] = [];
+            }
+            linksByFile[link.file_id].push({
+                token: link.token,
+                expiry_time: link.expiry_time,
+                download_limit: link.download_limit,
+                download_count: link.download_count,
+                created_at: link.created_at
+            });
+        });
+
+        // Attach links to files response
+        const filesWithLinks = files.map(file => {
+            const fileObj = file.toJSON();
+            fileObj.share_links = linksByFile[file.id] || [];
+            return fileObj;
+        });
+
+        res.json(filesWithLinks);
     } catch (error) {
         console.error('[files/list]', error);
         res.status(500).json({ error: 'Internal server error' });

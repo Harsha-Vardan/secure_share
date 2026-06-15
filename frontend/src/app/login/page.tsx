@@ -18,7 +18,7 @@ export default function Login() {
 
         try {
             const res = await api.post('/auth/login', { email, password });
-            login(res.data.token, { id: res.data.userId, email: res.data.email });
+            login(res.data.token, { id: res.data.userId, email: res.data.email, username: res.data.username });
         } catch (err: any) {
             setError(err.response?.data?.error || 'Login failed');
         } finally {

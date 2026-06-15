@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import Link from 'next/link';
 
 export default function Register() {
+    const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -17,10 +18,10 @@ export default function Register() {
         setError('');
 
         try {
-            await api.post('/auth/register', { email, password });
+            await api.post('/auth/register', { username, email, password });
             // Auto login after register
             const res = await api.post('/auth/login', { email, password });
-            login(res.data.token, { id: res.data.userId, email: res.data.email });
+            login(res.data.token, { id: res.data.userId, email: res.data.email, username: res.data.username });
         } catch (err: any) {
             setError(err.response?.data?.error || 'Registration failed');
         } finally {
@@ -39,6 +40,15 @@ export default function Register() {
                     <form className="space-y-6" onSubmit={handleSubmit}>
                         {error && <div className="text-red-500 text-sm bg-red-500/10 p-3 rounded-md border border-red-500/20">{error}</div>}
                         
+                        <div>
+                            <label className="block text-sm font-medium text-neutral-300">Username</label>
+                            <div className="mt-1">
+                                <input type="text" required value={username} onChange={e => setUsername(e.target.value)}
+                                    placeholder="Choose a username"
+                                    className="appearance-none block w-full px-3 py-2 border border-neutral-700 bg-neutral-800 rounded-md shadow-sm placeholder-neutral-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-white" />
+                            </div>
+                        </div>
+
                         <div>
                             <label className="block text-sm font-medium text-neutral-300">Email address</label>
                             <div className="mt-1">

@@ -11,6 +11,14 @@ import {
     CheckCircle2, AlertCircle, Zap, Clock, Layers
 } from 'lucide-react';
 
+interface ShareLinkRecord {
+    token: string;
+    expiry_time: string;
+    download_limit: number;
+    download_count: number;
+    created_at: string;
+}
+
 interface FileRecord {
     id: string;
     filename: string;
@@ -18,6 +26,7 @@ interface FileRecord {
     file_size: number;
     chunk_count: number;
     created_at: string;
+    share_links?: ShareLinkRecord[];
 }
 
 interface ShareOptions {
@@ -36,9 +45,10 @@ export default function Dashboard() {
     const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [error, setError] = useState('');
-    const [shareTokens, setShareTokens] = useState<Record<string, string>>({});
+    const [shareTokens, setShareTokens] = useState<Record<string, { url: string; key: string }>>({});
     const [shareOptions, setShareOptions] = useState<Record<string, ShareOptions>>({});
     const [expandedShare, setExpandedShare] = useState<string | null>(null);
+    const [copiedField, setCopiedField] = useState<string | null>(null);
     const [creatingLink, setCreatingLink] = useState<string | null>(null);
     const [shareError, setShareError] = useState<Record<string, string>>({});
     const [useChunked, setUseChunked] = useState(true);
@@ -166,9 +176,11 @@ export default function Dashboard() {
                 return;
             }
 
-            const shareUrl = `${window.location.origin}/download/${res.data.token}#key=${encodeURIComponent(key)}`;
-            setShareTokens(prev => ({ ...prev, [fileId]: shareUrl }));
+            // Security: Do NOT embed the key in the URL — share it separately
+            const shareUrl = `${window.location.origin}/download/${res.data.token}`;
+            setShareTokens(prev => ({ ...prev, [fileId]: { url: shareUrl, key } }));
             setExpandedShare(null);
+            await fetchFiles();
         } catch (err: any) {
             const msg = err?.response?.data?.error || err?.message || 'Failed to create share link';
             setShareError(prev => ({ ...prev, [fileId]: msg }));
@@ -219,7 +231,7 @@ export default function Dashboard() {
                         </span>
                     </div>
                     <div className="flex items-center gap-4">
-                        <span className="hidden sm:block text-sm text-white/40">{user.email}</span>
+                        <span className="hidden sm:block text-sm text-white/40">{user.username}</span>
                         <button onClick={logout}
                             className="flex items-center gap-2 px-3 py-1.5 text-sm text-white/50 hover:text-white hover:bg-white/5 rounded-lg transition-all">
                             <LogOut size={16} /> Sign out
@@ -389,6 +401,72 @@ export default function Dashboard() {
                                         </div>
                                     </div>
 
+                                    {/* Active Share Links */}
+                                    {file.share_links && file.share_links.length > 0 && (
+                                        <div className="mt-4 bg-white/[0.01] border border-white/5 rounded-xl p-3.5 space-y-2">
+                                            <p className="text-[10px] uppercase tracking-wider text-white/30 font-bold flex items-center gap-1">
+                                                <Clock size={10} /> Created Share Links
+                                            </p>
+                                            <div className="space-y-2">
+                                                {file.share_links.map(link => {
+                                                    const now = new Date();
+                                                    const expiry = new Date(link.expiry_time);
+                                                    const isExpired = now > expiry;
+                                                    const isLimitReached = link.download_count >= link.download_limit;
+                                                    const downloadsLeft = Math.max(0, link.download_limit - link.download_count);
+                                                    
+                                                    // Calculate remaining time
+                                                    let timeLeftStr = '';
+                                                    if (isExpired) {
+                                                        timeLeftStr = 'Expired';
+                                                    } else {
+                                                        const diffMs = expiry.getTime() - now.getTime();
+                                                        const diffHrs = Math.floor(diffMs / (3600 * 1000));
+                                                        const diffMins = Math.floor((diffMs % (3600 * 1000)) / (60 * 1000));
+                                                        if (diffHrs > 0) {
+                                                            timeLeftStr = `${diffHrs}h ${diffMins}m remaining`;
+                                                        } else {
+                                                            timeLeftStr = `${diffMins}m remaining`;
+                                                        }
+                                                    }
+
+                                                    const statusColor = (isExpired || isLimitReached) ? 'text-red-400/80' : 'text-emerald-400/80';
+                                                    const statusBg = (isExpired || isLimitReached) ? 'bg-red-500/5 border-red-500/10' : 'bg-emerald-500/5 border-emerald-500/10';
+
+                                                    return (
+                                                        <div key={link.token} className={`flex items-center justify-between border rounded-lg px-3 py-2 text-xs transition-all ${statusBg}`}>
+                                                            <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
+                                                                <span className="text-white/45 font-mono text-[10px] truncate max-w-[140px]" title={link.token}>
+                                                                    ...{link.token.slice(-12)}
+                                                                </span>
+                                                                <span className="text-white/10">|</span>
+                                                                <span className={`font-semibold ${statusColor}`}>
+                                                                    {isExpired ? 'Expired' : isLimitReached ? 'Limit Reached' : `${downloadsLeft} of ${link.download_limit} downloads left`}
+                                                                </span>
+                                                                {!isExpired && !isLimitReached && (
+                                                                    <>
+                                                                        <span className="text-white/10">·</span>
+                                                                        <span className="text-white/40">{timeLeftStr}</span>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const shareUrl = `${window.location.origin}/download/${link.token}`;
+                                                                    navigator.clipboard.writeText(shareUrl);
+                                                                    alert('Share link copied to clipboard!');
+                                                                }}
+                                                                className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 hover:border-white/20 text-[10px] font-medium rounded-md transition-all shrink-0"
+                                                            >
+                                                                Copy URL
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* ── Inline Share Panel (no overflow clipping) ── */}
                                     {expandedShare === file.id && !shareTokens[file.id] && (
                                         <div className="mt-4 bg-white/[0.03] border border-white/10 rounded-xl p-4 space-y-3">
@@ -442,29 +520,69 @@ export default function Dashboard() {
 
                                     {/* ── Generated Share Link (inline, full-width) ── */}
                                     {shareTokens[file.id] && (
-                                        <div className="mt-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4">
+                                        <div className="mt-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 space-y-3">
                                             <p className="text-xs font-semibold text-emerald-400 mb-2 flex items-center gap-1.5">
-                                                <CheckCircle2 size={12} /> Share link ready — copy and send it
+                                                <CheckCircle2 size={12} /> Share link created
                                             </p>
-                                            <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2">
-                                                <input
-                                                    readOnly
-                                                    value={shareTokens[file.id]}
-                                                    className="bg-transparent text-xs flex-1 text-white/50 outline-none min-w-0"
-                                                    onClick={e => (e.target as HTMLInputElement).select()}
-                                                />
-                                                <button
-                                                    onClick={() => {
-                                                        navigator.clipboard.writeText(shareTokens[file.id]);
-                                                    }}
-                                                    className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-all shrink-0"
-                                                >
-                                                    Copy
-                                                </button>
+
+                                            {/* Step 1: Share Link */}
+                                            <div>
+                                                <p className="text-[10px] uppercase tracking-wider text-white/30 mb-1.5 font-semibold">① Share Link <span className="text-white/20">(send via any channel)</span></p>
+                                                <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+                                                    <input
+                                                        readOnly
+                                                        value={shareTokens[file.id].url}
+                                                        className="bg-transparent text-xs flex-1 text-white/50 outline-none min-w-0"
+                                                        onClick={e => (e.target as HTMLInputElement).select()}
+                                                    />
+                                                    <button
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(shareTokens[file.id].url);
+                                                            setCopiedField('link-' + file.id);
+                                                            setTimeout(() => setCopiedField(null), 2000);
+                                                        }}
+                                                        className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-all shrink-0"
+                                                    >
+                                                        {copiedField === 'link-' + file.id ? '✓ Copied' : 'Copy'}
+                                                    </button>
+                                                </div>
                                             </div>
+
+                                            {/* Step 2: Decryption Key (separate channel) */}
+                                            <div>
+                                                <p className="text-[10px] uppercase tracking-wider text-amber-400/70 mb-1.5 font-semibold flex items-center gap-1">② Decryption Key <Lock size={9} /> <span className="text-amber-400/40">(send via a DIFFERENT channel)</span></p>
+                                                <div className="flex items-center gap-2 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
+                                                    <input
+                                                        readOnly
+                                                        value={shareTokens[file.id].key}
+                                                        className="bg-transparent text-xs flex-1 text-amber-300/60 outline-none min-w-0 font-mono"
+                                                        onClick={e => (e.target as HTMLInputElement).select()}
+                                                    />
+                                                    <button
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(shareTokens[file.id].key);
+                                                            setCopiedField('key-' + file.id);
+                                                            setTimeout(() => setCopiedField(null), 2000);
+                                                        }}
+                                                        className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white text-xs font-medium rounded-md transition-all shrink-0"
+                                                    >
+                                                        {copiedField === 'key-' + file.id ? '✓ Copied' : 'Copy Key'}
+                                                    </button>
+                                                </div>
+                                            </div>
+
+
+
+                                            <div className="bg-amber-500/5 border border-amber-500/15 rounded-lg p-2.5">
+                                                <p className="text-[11px] text-amber-400/70 leading-relaxed">
+                                                    <AlertCircle size={11} className="inline mr-1 -mt-0.5" />
+                                                    <strong>Security:</strong> Send the link and the key through <strong>different channels</strong> (e.g., link via email, key via SMS). This way, intercepting one channel alone won't compromise the file.
+                                                </p>
+                                            </div>
+
                                             <button
                                                 onClick={() => setShareTokens(prev => { const n = { ...prev }; delete n[file.id]; return n; })}
-                                                className="mt-2 text-xs text-white/25 hover:text-white/40 transition-colors"
+                                                className="text-xs text-white/25 hover:text-white/40 transition-colors"
                                             >
                                                 Generate new link
                                             </button>

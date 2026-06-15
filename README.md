@@ -4,11 +4,12 @@ A full-stack secure file sharing platform where files are **encrypted on the cli
 
 ## ✨ Features
 
-- **AES-256-GCM Client-Side Encryption** — Files are encrypted in the browser using the Web Crypto API before being transmitted
-- **Time-Limited Share Links** — Generated links expire after a configurable duration
-- **Download Limits** — Restrict how many times a file can be downloaded
-- **JWT Authentication** — Secure login/registration with bcrypt-hashed passwords
-- **Zero-Knowledge Architecture** — Encryption keys live only in the share link hash (`#key=...`) and are never sent to the server
+- **AES-256-GCM Client-Side Encryption** — Files are encrypted in the browser using the Web Crypto API before being transmitted.
+- **Time-Limited Share Links** — Generated links expire after a configurable duration.
+- **Download Limits** — Restrict how many times a file can be downloaded.
+- **JWT Authentication** — Secure login/registration with username, email, and bcrypt-hashed passwords.
+- **Zero-Knowledge Architecture** — Encryption keys are kept strictly client-side. The key is shared out-of-band separately from the download link, preventing confidentiality leakage.
+- **Active Share Link Tracking** — Monitor all generated share links, remaining downloads, and active time-to-live (TTL) countdown timers right from the dashboard.
 
 ## 🏗️ Tech Stack
 
@@ -16,7 +17,7 @@ A full-stack secure file sharing platform where files are **encrypted on the cli
 |---|---|
 | Frontend | Next.js 16, TypeScript, Tailwind CSS |
 | Backend | Node.js, Express 5 |
-| Database | SQLite via Prisma ORM |
+| Database | MongoDB (Mongoose) |
 | Encryption | Web Crypto API (AES-GCM-256) |
 | Auth | JWT + bcrypt |
 
@@ -63,10 +64,11 @@ cd secure_share
 
 ### 2. Backend setup
 
+Configure `backend/.env` with your MongoDB connection string (`MONGODB_URI`), then run:
+
 ```bash
 cd backend
 npm install
-npx prisma db push   # Creates the SQLite database
 npm start            # Runs on http://localhost:3001
 ```
 
@@ -99,13 +101,16 @@ File encrypted in the browser (IV stored on server, key stays local)
 Encrypted blob uploaded to backend → stored on disk
       │
       ▼
-Share link generated:
-  https://app.com/download/{token}#key={base64-aes-key}
-                                   ↑
-                          URL fragment: never sent to server
+Share link generated (e.g. https://app.com/download/{token})
+      │
+      ▼
+Decryption key displayed separately on Dashboard for copy/pasting
+      │
+      ▼
+Key shared with recipient via separate secure channel (e.g., chat, SMS)
 ```
 
-When downloading, the browser reads the `#key` fragment locally and uses it to decrypt the downloaded blob — the server only ever sees encrypted bytes.
+The recipient enters the decryption key manually on the download page. Since the encryption key is never included in the share link, even if the link is intercepted or leaks (e.g., via chat logs or browser history), the file remains completely secure. The server never has access to the plaintext file or the key.
 
 ## 📡 API Reference
 
@@ -123,7 +128,7 @@ When downloading, the browser reads the `#key` fragment locally and uses it to d
 
 **Backend** (`backend/.env`):
 ```env
-DATABASE_URL="file:./prisma/dev.db"
+MONGODB_URI="mongodb://localhost:27017/secureshare"
 PORT=3001
 JWT_SECRET="your-secret-here"
 FRONTEND_URL="http://localhost:3000"

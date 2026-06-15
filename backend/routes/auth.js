@@ -9,19 +9,24 @@ const SALT_ROUNDS = 10;
 // ─── POST /auth/register ──────────────────────────────────────────────────────
 router.post('/register', async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { username, email, password } = req.body;
 
-        if (!email || !password) {
-            return res.status(400).json({ error: 'Email and password are required' });
+        if (!username || !email || !password) {
+            return res.status(400).json({ error: 'Username, email and password are required' });
         }
 
-        const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
-        if (existingUser) {
-            return res.status(400).json({ error: 'User already exists' });
+        const existingEmail = await User.findOne({ email: email.toLowerCase().trim() });
+        if (existingEmail) {
+            return res.status(400).json({ error: 'Email already exists' });
+        }
+
+        const existingUsername = await User.findOne({ username: username.trim() });
+        if (existingUsername) {
+            return res.status(400).json({ error: 'Username already taken' });
         }
 
         const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
-        const user = await User.create({ email, password_hash });
+        const user = await User.create({ username: username.trim(), email, password_hash });
 
         res.status(201).json({ message: 'User created successfully', userId: user.id });
     } catch (error) {
@@ -50,12 +55,12 @@ router.post('/login', async (req, res) => {
         }
 
         const token = jwt.sign(
-            { id: user.id, email: user.email },
+            { id: user.id, email: user.email, username: user.username },
             process.env.JWT_SECRET,
             { expiresIn: '24h' }
         );
 
-        res.json({ token, userId: user.id, email: user.email });
+        res.json({ token, userId: user.id, email: user.email, username: user.username });
     } catch (error) {
         console.error('[auth/login]', error);
         res.status(500).json({ error: 'Internal server error' });

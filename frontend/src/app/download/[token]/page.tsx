@@ -26,7 +26,9 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
     const [error, setError] = useState('');
     const [linkInfo, setLinkInfo] = useState<LinkInfo | null>(null);
     const [password, setPassword] = useState('');
+    const [decryptionKey, setDecryptionKey] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [showKey, setShowKey] = useState(false);
     const [integrityStatus, setIntegrityStatus] = useState<IntegrityStatus>('pending');
     const [downloadedFile, setDownloadedFile] = useState<{ name: string; size: string } | null>(null);
     const [progress, setProgress] = useState(0);
@@ -71,12 +73,14 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
         setProgress(10);
 
         try {
-            // 1. Extract encryption key from URL fragment (never sent to server)
-            //    The key is encodeURIComponent'd to survive URLSearchParams parsing of Base64 +/=
-            const hash = window.location.hash;
-            const rawKeyParam = new URLSearchParams(hash.substring(1)).get('key');
-            if (!rawKeyParam) throw new Error('Encryption key missing from URL. Share the full URL including the #key= fragment.');
-            const keyParam = decodeURIComponent(rawKeyParam);
+            // 1. Get decryption key — prefer manual input, fallback to URL fragment for backward compat
+            let keyParam = decryptionKey.trim();
+            if (!keyParam) {
+                const hash = window.location.hash;
+                const rawKeyParam = new URLSearchParams(hash.substring(1)).get('key');
+                if (rawKeyParam) keyParam = decodeURIComponent(rawKeyParam);
+            }
+            if (!keyParam) throw new Error('Please enter the decryption key provided by the sender.');
 
             // Use pre-fetched linkInfo for filename, IV and hash — avoids CORS custom header issues
             const fileName  = linkInfo?.filename || 'securely_shared_file';
@@ -249,24 +253,52 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
                             </div>
                         ) : !error ? (
                             <div className="space-y-4">
-                                {/* Password field */}
-                                {linkInfo?.password_protected && (
+                                {/* Decryption Key field (always required) */}
+                                <div>
+                                    <label className="text-xs text-white/40 mb-1.5 flex items-center gap-1.5 font-medium">
+                                        <ShieldCheck size={12} className="text-blue-400" /> Decryption Key
+                                    </label>
                                     <div className="relative">
-                                        <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
+                                        <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400/40" />
                                         <input
-                                            type={showPassword ? 'text' : 'password'}
-                                            placeholder="Enter link password"
-                                            value={password}
-                                            onChange={e => setPassword(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && handleDownload()}
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-10 py-3 text-sm text-white placeholder:text-white/25 outline-none focus:border-blue-500/50 transition-colors"
+                                            type={showKey ? 'text' : 'password'}
+                                            placeholder="Paste the decryption key from sender"
+                                            value={decryptionKey}
+                                            onChange={e => setDecryptionKey(e.target.value)}
+                                            className="w-full bg-white/5 border border-blue-500/20 rounded-xl pl-10 pr-10 py-3 text-sm text-white placeholder:text-white/25 outline-none focus:border-blue-500/50 transition-colors font-mono"
                                         />
                                         <button
-                                            onClick={() => setShowPassword(v => !v)}
+                                            onClick={() => setShowKey(v => !v)}
                                             className="absolute right-3 top-1/2 -translate-y-1/2 text-white/25 hover:text-white/50"
                                         >
-                                            {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                                            {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
                                         </button>
+                                    </div>
+                                </div>
+
+                                {/* Password field (only if password-protected) */}
+                                {linkInfo?.password_protected && (
+                                    <div>
+                                        <label className="text-xs text-white/40 mb-1.5 flex items-center gap-1.5 font-medium">
+                                            <Lock size={12} className="text-amber-400" /> Link Password
+                                        </label>
+                                        <div className="relative">
+                                            <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
+                                            <input
+                                                type={showPassword ? 'text' : 'password'}
+                                                placeholder="Enter link password"
+                                                value={password}
+                                                onChange={e => setPassword(e.target.value)}
+                                                onKeyDown={e => e.key === 'Enter' && handleDownload()}
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-10 py-3 text-sm text-white placeholder:text-white/25 outline-none focus:border-blue-500/50 transition-colors"
+                                            />
+                                            <button
+                                                onClick={() => setShowPassword(v => !v)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/25 hover:text-white/50"
+                                            >
+                                                {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
 
@@ -288,7 +320,7 @@ export default function DownloadPage({ params }: { params: Promise<{ token: stri
 
                                 <button
                                     onClick={handleDownload}
-                                    disabled={decrypting || (linkInfo?.password_protected && !password)}
+                                    disabled={decrypting || !decryptionKey.trim() || (linkInfo?.password_protected && !password)}
                                     className="w-full flex items-center justify-center gap-2.5 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-all shadow-lg shadow-blue-600/20 active:scale-[0.98]"
                                 >
                                     {decrypting ? (
