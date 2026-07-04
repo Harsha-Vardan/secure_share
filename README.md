@@ -2,6 +2,12 @@
 
 A full-stack secure file sharing platform where files are **encrypted on the client before upload** — the server never sees plaintext data or encryption keys.
 
+## 🌐 Live Demo
+
+Frontend: https://secure-share-pi-rust.vercel.app/login
+
+Backend: deployed on Render
+
 ## ✨ Features
 
 - **AES-256-GCM Client-Side Encryption** — Files are encrypted in the browser using the Web Crypto API before being transmitted.
@@ -13,13 +19,13 @@ A full-stack secure file sharing platform where files are **encrypted on the cli
 
 ## 🏗️ Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Frontend | Next.js 16, TypeScript, Tailwind CSS |
-| Backend | Node.js, Express 5 |
-| Database | MongoDB (Mongoose) |
-| Encryption | Web Crypto API (AES-GCM-256) |
-| Auth | JWT + bcrypt |
+| Layer      | Technology                           |
+| ---------- | ------------------------------------ |
+| Frontend   | Next.js 16, TypeScript, Tailwind CSS |
+| Backend    | Node.js, Express 5                   |
+| Database   | MongoDB (Mongoose)                   |
+| Encryption | Web Crypto API (AES-GCM-256)         |
+| Auth       | JWT + bcrypt                         |
 
 ## 📁 Project Structure
 
@@ -52,6 +58,7 @@ secure_share/
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - Node.js 18+
 - npm
 
@@ -114,19 +121,20 @@ The recipient enters the decryption key manually on the download page. Since the
 
 ## 📡 API Reference
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/auth/register` | ❌ | Register a new user |
-| POST | `/auth/login` | ❌ | Login, receive JWT |
-| POST | `/files/upload` | ✅ | Upload encrypted file |
-| GET | `/files` | ✅ | List user's files |
-| DELETE | `/files/:id` | ✅ | Delete a file |
-| POST | `/share/create` | ✅ | Create a share link |
-| GET | `/share/download/:token` | ❌ | Download encrypted file |
+| Method | Endpoint                 | Auth | Description             |
+| ------ | ------------------------ | ---- | ----------------------- |
+| POST   | `/auth/register`         | ❌   | Register a new user     |
+| POST   | `/auth/login`            | ❌   | Login, receive JWT      |
+| POST   | `/files/upload`          | ✅   | Upload encrypted file   |
+| GET    | `/files`                 | ✅   | List user's files       |
+| DELETE | `/files/:id`             | ✅   | Delete a file           |
+| POST   | `/share/create`          | ✅   | Create a share link     |
+| GET    | `/share/download/:token` | ❌   | Download encrypted file |
 
 ## ⚙️ Environment Variables
 
 **Backend** (`backend/.env`):
+
 ```env
 MONGODB_URI="mongodb://localhost:27017/secureshare"
 PORT=3001
@@ -135,6 +143,7 @@ FRONTEND_URL="http://localhost:3000"
 ```
 
 **Frontend** (`frontend/.env.local`):
+
 ```env
 NEXT_PUBLIC_BACKEND_URL=http://localhost:3001
 ```
