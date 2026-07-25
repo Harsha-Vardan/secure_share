@@ -534,127 +534,152 @@ export default function Dashboard() {
                                         </div>
                                     )}
 
-                                    {/* ── Inline Share Panel (no overflow clipping) ── */}
-                                    {expandedShare === file.id && !shareTokens[file.id] && (
-                                        <div className="mt-4 bg-white/[0.03] border border-white/10 rounded-xl p-4 space-y-3">
-                                            <p className="text-xs font-semibold text-white/50 uppercase tracking-wider">Link Options</p>
+                                    {/* ── Inline Share Panel ────────────────────────────────────── */}
+                                    {expandedShare === file.id && (() => {
+                                        const sessionKey = typeof window !== 'undefined'
+                                            ? sessionStorage.getItem(`encryptionKey_${file.id}`)
+                                            : null;
+                                        const justCreated = shareTokens[file.id];
 
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div>
-                                                    <label className="text-xs text-white/40 mb-1 flex items-center gap-1"><Clock size={10} /> Expiry (hours)</label>
-                                                    <input
-                                                        type="number" min={1} max={720}
-                                                        value={getShareOptions(file.id).expiryHours}
-                                                        onChange={e => updateShareOption(file.id, 'expiryHours', parseInt(e.target.value))}
-                                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-blue-500/50"
-                                                    />
+                                        return (
+                                            <div className="mt-4 space-y-3">
+                                                {/* ─ Decryption Key (always visible while panel is open) ─ */}
+                                                <div className={`rounded-xl p-4 border ${
+                                                    sessionKey
+                                                        ? 'bg-amber-500/5 border-amber-500/20'
+                                                        : 'bg-red-500/5 border-red-500/15'
+                                                }`}>
+                                                    <p className="text-[10px] uppercase tracking-wider font-bold mb-2 flex items-center gap-1 ${
+                                                        sessionKey ? 'text-amber-400/80' : 'text-red-400/70'
+                                                    }">
+                                                        <Lock size={10} /> Decryption Key
+                                                        <span className="ml-1 font-normal opacity-60">(share via a DIFFERENT channel)</span>
+                                                    </p>
+                                                    {sessionKey ? (
+                                                        <div className="flex items-center gap-2 bg-amber-500/5 border border-amber-500/15 rounded-lg px-3 py-2">
+                                                            <input
+                                                                readOnly
+                                                                value={sessionKey}
+                                                                className="bg-transparent text-xs flex-1 text-amber-300/70 outline-none min-w-0 font-mono"
+                                                                onClick={e => (e.target as HTMLInputElement).select()}
+                                                            />
+                                                            <button
+                                                                onClick={() => {
+                                                                    navigator.clipboard.writeText(sessionKey);
+                                                                    setCopiedField('key-' + file.id);
+                                                                    setTimeout(() => setCopiedField(null), 2000);
+                                                                }}
+                                                                className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white text-xs font-medium rounded-md transition-all shrink-0"
+                                                            >
+                                                                {copiedField === 'key-' + file.id ? '✓ Copied' : 'Copy Key'}
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-[11px] text-red-400/70 leading-relaxed flex items-start gap-1.5">
+                                                            <AlertCircle size={12} className="shrink-0 mt-0.5" />
+                                                            Key unavailable — it only exists in the browser session where the file was uploaded.
+                                                            Re-upload the file to get a new key and share link.
+                                                        </p>
+                                                    )}
                                                 </div>
-                                                <div>
-                                                    <label className="text-xs text-white/40 mb-1 block">Max Downloads</label>
-                                                    <input
-                                                        type="number" min={1} max={100}
-                                                        value={getShareOptions(file.id).downloadLimit}
-                                                        onChange={e => updateShareOption(file.id, 'downloadLimit', parseInt(e.target.value))}
-                                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-blue-500/50"
-                                                    />
-                                                </div>
+
+                                                {/* ─ Link Generator ─ */}
+                                                {!justCreated ? (
+                                                    <div className="bg-white/[0.03] border border-white/10 rounded-xl p-4 space-y-3">
+                                                        <p className="text-xs font-semibold text-white/50 uppercase tracking-wider">Link Options</p>
+
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            <div>
+                                                                <label className="text-xs text-white/40 mb-1 flex items-center gap-1"><Clock size={10} /> Expiry (hours)</label>
+                                                                <input
+                                                                    type="number" min={1} max={720}
+                                                                    value={getShareOptions(file.id).expiryHours}
+                                                                    onChange={e => updateShareOption(file.id, 'expiryHours', parseInt(e.target.value))}
+                                                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-blue-500/50"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="text-xs text-white/40 mb-1 block">Max Downloads</label>
+                                                                <input
+                                                                    type="number" min={1} max={100}
+                                                                    value={getShareOptions(file.id).downloadLimit}
+                                                                    onChange={e => updateShareOption(file.id, 'downloadLimit', parseInt(e.target.value))}
+                                                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-blue-500/50"
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="text-xs text-white/40 mb-1 flex items-center gap-1"><Lock size={10} /> Password (optional)</label>
+                                                            <input
+                                                                type="password"
+                                                                placeholder="Leave blank for no password"
+                                                                value={getShareOptions(file.id).password}
+                                                                onChange={e => updateShareOption(file.id, 'password', e.target.value)}
+                                                                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-blue-500/50 placeholder:text-white/20"
+                                                            />
+                                                        </div>
+
+                                                        <button
+                                                            onClick={() => handleCreateLink(file.id)}
+                                                            disabled={!!creatingLink || !sessionKey}
+                                                            title={!sessionKey ? 'Key unavailable — re-upload the file first' : ''}
+                                                            className="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm rounded-lg font-medium transition-all flex items-center justify-center gap-2"
+                                                        >
+                                                            {creatingLink === file.id ? <Loader2 size={14} className="animate-spin" /> : <LinkIcon size={14} />}
+                                                            Generate Link
+                                                        </button>
+                                                        {shareError[file.id] && (
+                                                            <p className="text-red-400 text-xs leading-snug">{shareError[file.id]}</p>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    /* ─ Just-created result ─ */
+                                                    <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 space-y-3">
+                                                        <p className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+                                                            <CheckCircle2 size={12} /> Share link created
+                                                        </p>
+
+                                                        <div>
+                                                            <p className="text-[10px] uppercase tracking-wider text-white/30 mb-1.5 font-semibold">① Share Link <span className="text-white/20">(send via any channel)</span></p>
+                                                            <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+                                                                <input
+                                                                    readOnly
+                                                                    value={justCreated.url}
+                                                                    className="bg-transparent text-xs flex-1 text-white/50 outline-none min-w-0"
+                                                                    onClick={e => (e.target as HTMLInputElement).select()}
+                                                                />
+                                                                <button
+                                                                    onClick={() => {
+                                                                        navigator.clipboard.writeText(justCreated.url);
+                                                                        setCopiedField('link-' + file.id);
+                                                                        setTimeout(() => setCopiedField(null), 2000);
+                                                                    }}
+                                                                    className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-all shrink-0"
+                                                                >
+                                                                    {copiedField === 'link-' + file.id ? '✓ Copied' : 'Copy'}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="bg-amber-500/5 border border-amber-500/15 rounded-lg p-2.5">
+                                                            <p className="text-[11px] text-amber-400/70 leading-relaxed">
+                                                                <AlertCircle size={11} className="inline mr-1 -mt-0.5" />
+                                                                <strong>Security:</strong> Send the link and the key through <strong>different channels</strong> (e.g., link via email, key via SMS).
+                                                            </p>
+                                                        </div>
+
+                                                        <button
+                                                            onClick={() => setShareTokens(prev => { const n = { ...prev }; delete n[file.id]; return n; })}
+                                                            className="text-xs text-white/25 hover:text-white/40 transition-colors"
+                                                        >
+                                                            Generate another link
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
-
-                                            <div>
-                                                <label className="text-xs text-white/40 mb-1 flex items-center gap-1"><Lock size={10} /> Password (optional)</label>
-                                                <input
-                                                    type="password"
-                                                    placeholder="Leave blank for no password"
-                                                    value={getShareOptions(file.id).password}
-                                                    onChange={e => updateShareOption(file.id, 'password', e.target.value)}
-                                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-blue-500/50 placeholder:text-white/20"
-                                                />
-                                            </div>
-
-                                            <button
-                                                onClick={() => handleCreateLink(file.id)}
-                                                disabled={!!creatingLink}
-                                                className="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm rounded-lg font-medium transition-all flex items-center justify-center gap-2"
-                                            >
-                                                {creatingLink === file.id ? <Loader2 size={14} className="animate-spin" /> : <LinkIcon size={14} />}
-                                                Generate Link
-                                            </button>
-                                            {shareError[file.id] && (
-                                                <p className="text-red-400 text-xs leading-snug">{shareError[file.id]}</p>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* ── Generated Share Link (inline, full-width) ── */}
-                                    {shareTokens[file.id] && (
-                                        <div className="mt-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 space-y-3">
-                                            <p className="text-xs font-semibold text-emerald-400 mb-2 flex items-center gap-1.5">
-                                                <CheckCircle2 size={12} /> Share link created
-                                            </p>
-
-                                            {/* Step 1: Share Link */}
-                                            <div>
-                                                <p className="text-[10px] uppercase tracking-wider text-white/30 mb-1.5 font-semibold">① Share Link <span className="text-white/20">(send via any channel)</span></p>
-                                                <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2">
-                                                    <input
-                                                        readOnly
-                                                        value={shareTokens[file.id].url}
-                                                        className="bg-transparent text-xs flex-1 text-white/50 outline-none min-w-0"
-                                                        onClick={e => (e.target as HTMLInputElement).select()}
-                                                    />
-                                                    <button
-                                                        onClick={() => {
-                                                            navigator.clipboard.writeText(shareTokens[file.id].url);
-                                                            setCopiedField('link-' + file.id);
-                                                            setTimeout(() => setCopiedField(null), 2000);
-                                                        }}
-                                                        className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-all shrink-0"
-                                                    >
-                                                        {copiedField === 'link-' + file.id ? '✓ Copied' : 'Copy'}
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            {/* Step 2: Decryption Key (separate channel) */}
-                                            <div>
-                                                <p className="text-[10px] uppercase tracking-wider text-amber-400/70 mb-1.5 font-semibold flex items-center gap-1">② Decryption Key <Lock size={9} /> <span className="text-amber-400/40">(send via a DIFFERENT channel)</span></p>
-                                                <div className="flex items-center gap-2 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
-                                                    <input
-                                                        readOnly
-                                                        value={shareTokens[file.id].key}
-                                                        className="bg-transparent text-xs flex-1 text-amber-300/60 outline-none min-w-0 font-mono"
-                                                        onClick={e => (e.target as HTMLInputElement).select()}
-                                                    />
-                                                    <button
-                                                        onClick={() => {
-                                                            navigator.clipboard.writeText(shareTokens[file.id].key);
-                                                            setCopiedField('key-' + file.id);
-                                                            setTimeout(() => setCopiedField(null), 2000);
-                                                        }}
-                                                        className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white text-xs font-medium rounded-md transition-all shrink-0"
-                                                    >
-                                                        {copiedField === 'key-' + file.id ? '✓ Copied' : 'Copy Key'}
-                                                    </button>
-                                                </div>
-                                            </div>
-
-
-
-                                            <div className="bg-amber-500/5 border border-amber-500/15 rounded-lg p-2.5">
-                                                <p className="text-[11px] text-amber-400/70 leading-relaxed">
-                                                    <AlertCircle size={11} className="inline mr-1 -mt-0.5" />
-                                                    <strong>Security:</strong> Send the link and the key through <strong>different channels</strong> (e.g., link via email, key via SMS). This way, intercepting one channel alone won't compromise the file.
-                                                </p>
-                                            </div>
-
-                                            <button
-                                                onClick={() => setShareTokens(prev => { const n = { ...prev }; delete n[file.id]; return n; })}
-                                                className="text-xs text-white/25 hover:text-white/40 transition-colors"
-                                            >
-                                                Generate new link
-                                            </button>
-                                        </div>
-                                    )}
+                                        );
+                                    })()}
                                     {/* ── Activity Log Panel ───────────────────────────────────── */}
                                     {expandedLogs === file.id && (
                                         <div className="mt-4 bg-white/[0.02] border border-violet-500/15 rounded-xl overflow-hidden">
