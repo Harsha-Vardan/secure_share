@@ -1,15 +1,14 @@
+const path = require('path')
+const fs = require('fs')
 const multer = require('multer')
 const crypto = require('crypto')
 const File = require('../models/File')
 const ShareLink = require('../models/ShareLink')
 const { log } = require('../logger')
-const {
-  uploadFile,
-  deleteFile,
-  generateObjectKey,
-} = require('../services/r2Service')
 
-// ─── Multer (single-shot upload) ──────────────────────────────────────────────
+const UPLOADS_DIR = path.join(__dirname, '..', 'uploads')
+
+// ─── Multer (single-shot upload, memory storage) ──────────────────────────────
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 500 * 1024 * 1024 },
@@ -27,40 +26,33 @@ const uploadFile_ = async (req, res) => {
         .json({ error: 'Initialization vector (iv) is required' })
 
     const fileBuffer = req.file.buffer
-    const fileHash = crypto
-      .createHash('sha256')
-      .update(fileBuffer)
-      .digest('hex')
-    const objectKey = generateObjectKey(req.file.originalname)
-    const uploadResult = await uploadFile(fileBuffer, objectKey)
+    const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex')
+
+    // Save to local disk
+    const storedFilename = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}`
+    const filePath = path.join(UPLOADS_DIR, storedFilename)
+    fs.writeFileSync(filePath, fileBuffer)
 
     const fileRecord = await File.create({
-      user_id: req.user.id,
-      filename: req.file.originalname,
-      encrypted_file_path: '',
-      objectKey: uploadResult.objectKey,
-      bucket: uploadResult.bucket,
-      storageProvider: 'cloudflare-r2',
-      mimeType: req.file.mimetype || 'application/octet-stream',
-      size: fileBuffer.length,
-      etag: uploadResult.etag,
+      user_id:    req.user.id,
+      filename:   req.file.originalname,
+      file_path:  filePath,
+      mimeType:   req.file.mimetype || 'application/octet-stream',
       iv,
-      file_hash: fileHash,
-      file_size: fileBuffer.length,
+      file_hash:  fileHash,
+      file_size:  fileBuffer.length,
       chunk_count: 1,
     })
 
     await log({
-      event: 'upload',
+      event:  'upload',
       userId: req.user.id,
       fileId: fileRecord.id,
       detail: `size=${fileBuffer.length} hash=${fileHash.slice(0, 12)}...`,
-      ip: req.ip,
+      ip:     req.ip,
     })
 
-    res
-      .status(201)
-      .json({ message: 'File uploaded successfully', file: fileRecord })
+    res.status(201).json({ message: 'File uploaded successfully', file: fileRecord })
   } catch (error) {
     console.error('[files/upload]', error)
     res.status(500).json({ error: 'Internal server error' })
@@ -81,15 +73,13 @@ const listFiles = async (req, res) => {
     // Group share links by file_id
     const linksByFile = {}
     shareLinks.forEach((link) => {
-      if (!linksByFile[link.file_id]) {
-        linksByFile[link.file_id] = []
-      }
+      if (!linksByFile[link.file_id]) linksByFile[link.file_id] = []
       linksByFile[link.file_id].push({
-        token: link.token,
-        expiry_time: link.expiry_time,
+        token:          link.token,
+        expiry_time:    link.expiry_time,
         download_limit: link.download_limit,
         download_count: link.download_count,
-        created_at: link.created_at,
+        created_at:     link.created_at,
       })
     })
 
@@ -115,30 +105,29 @@ const deleteFileById = async (req, res) => {
 
     if (fileRecord.user_id.toString() !== req.user.id.toString()) {
       await log({
-        event: 'access_denied',
+        event:  'access_denied',
         userId: req.user.id,
         fileId: req.params.id,
-        ip: req.ip,
+        ip:     req.ip,
         detail: 'delete attempt',
       })
       return res.status(403).json({ error: 'Access denied' })
     }
 
-    if (fileRecord.objectKey) {
+    // Delete from local disk
+    if (fileRecord.file_path && fs.existsSync(fileRecord.file_path)) {
       try {
-        await deleteFile(fileRecord.objectKey)
+        fs.unlinkSync(fileRecord.file_path)
       } catch (error) {
-        console.error('[files/delete][r2]', error)
+        console.error('[files/delete][disk]', error)
         await log({
-          event: 'delete_failed',
+          event:  'delete_failed',
           userId: req.user.id,
           fileId: req.params.id,
-          ip: req.ip,
-          detail: 'r2 delete failed',
+          ip:     req.ip,
+          detail: 'disk delete failed',
         })
-        return res
-          .status(500)
-          .json({ error: 'Failed to delete file from storage' })
+        return res.status(500).json({ error: 'Failed to delete file from storage' })
       }
     }
 
