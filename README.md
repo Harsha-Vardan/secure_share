@@ -140,6 +140,11 @@ MONGODB_URI="mongodb://localhost:27017/secureshare"
 PORT=3001
 JWT_SECRET="your-secret-here"
 FRONTEND_URL="http://localhost:3000"
+R2_ACCOUNT_ID="your-account-id"
+R2_ACCESS_KEY_ID="your-access-key"
+R2_SECRET_ACCESS_KEY="your-secret-key"
+R2_BUCKET_NAME="your-bucket-name"
+R2_PUBLIC_URL="https://<bucket>.<account>.r2.cloudflarestorage.com"
 ```
 
 **Frontend** (`frontend/.env.local`):
