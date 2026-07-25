@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -8,7 +8,8 @@ import { uploadFileInChunks, UploadProgress } from '@/lib/chunkedUpload';
 import {
     LogOut, Upload, Link as LinkIcon, Trash2, File as FileIcon,
     Loader2, ShieldCheck, Hash, Lock, ChevronDown, ChevronUp,
-    CheckCircle2, AlertCircle, Zap, Clock, Layers
+    CheckCircle2, AlertCircle, Zap, Clock, Layers, Activity,
+    Download, ShieldX, KeyRound, Eye
 } from 'lucide-react';
 
 interface ShareLinkRecord {
@@ -35,6 +36,36 @@ interface ShareOptions {
     password: string;
 }
 
+interface ActivityLog {
+    id: string;
+    event: string;
+    token: string | null;
+    ip: string | null;
+    detail: string | null;
+    created_at: string;
+}
+
+function timeAgo(dateStr: string): string {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    const hrs = Math.floor(mins / 60);
+    const days = Math.floor(hrs / 24);
+    if (days > 0) return `${days}d ago`;
+    if (hrs > 0) return `${hrs}h ago`;
+    if (mins > 0) return `${mins}m ago`;
+    return 'just now';
+}
+
+const EVENT_META: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
+    upload:        { icon: <Upload size={12} />,    label: 'Uploaded',      color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
+    download:      { icon: <Download size={12} />,  label: 'Downloaded',    color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
+    link_created:  { icon: <LinkIcon size={12} />,  label: 'Link Created',  color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20' },
+    access_denied: { icon: <ShieldX size={12} />,   label: 'Access Denied', color: 'text-red-400 bg-red-500/10 border-red-500/20' },
+    auth_fail:     { icon: <KeyRound size={12} />,  label: 'Auth Failed',   color: 'text-orange-400 bg-orange-500/10 border-orange-500/20' },
+    chunk_upload:  { icon: <Layers size={12} />,    label: 'Chunk Upload',  color: 'text-sky-400 bg-sky-500/10 border-sky-500/20' },
+    delete:        { icon: <Trash2 size={12} />,    label: 'Deleted',       color: 'text-red-400 bg-red-500/10 border-red-500/20' },
+};
+
 export default function Dashboard() {
     const { user, loading, logout } = useAuth();
     const router = useRouter();
@@ -52,6 +83,9 @@ export default function Dashboard() {
     const [creatingLink, setCreatingLink] = useState<string | null>(null);
     const [shareError, setShareError] = useState<Record<string, string>>({});
     const [useChunked, setUseChunked] = useState(true);
+    const [expandedLogs, setExpandedLogs] = useState<string | null>(null);
+    const [fileLogs, setFileLogs] = useState<Record<string, ActivityLog[]>>({});
+    const [logsLoading, setLogsLoading] = useState<string | null>(null);
 
     useEffect(() => {
         if (!loading && !user) router.push('/login');
@@ -64,6 +98,24 @@ export default function Dashboard() {
             setFiles(res.data);
         } catch {
             console.error('Failed to fetch files');
+        }
+    };
+
+    const fetchFileLogs = async (fileId: string) => {
+        if (expandedLogs === fileId) {
+            setExpandedLogs(null);
+            return;
+        }
+        setExpandedLogs(fileId);
+        if (fileLogs[fileId]) return; // already loaded
+        setLogsLoading(fileId);
+        try {
+            const res = await api.get(`/files/${fileId}/logs`);
+            setFileLogs(prev => ({ ...prev, [fileId]: res.data }));
+        } catch {
+            console.error('Failed to fetch logs');
+        } finally {
+            setLogsLoading(null);
         }
     };
 
@@ -392,6 +444,21 @@ export default function Dashboard() {
                                             </button>
 
                                             <button
+                                                onClick={() => fetchFileLogs(file.id)}
+                                                className={`px-3 py-1.5 flex items-center gap-1.5 text-sm border rounded-lg transition-all ${
+                                                    expandedLogs === file.id
+                                                        ? 'text-violet-400 bg-violet-500/10 border-violet-500/30'
+                                                        : 'text-white/50 bg-white/5 hover:bg-white/10 border-white/10'
+                                                }`}
+                                            >
+                                                {logsLoading === file.id
+                                                    ? <Loader2 size={14} className="animate-spin" />
+                                                    : <Activity size={14} />}
+                                                Activity
+                                                {expandedLogs === file.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                            </button>
+
+                                            <button
                                                 onClick={() => handleDelete(file.id)}
                                                 className="p-1.5 text-white/20 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
                                                 title="Delete file"
@@ -588,6 +655,66 @@ export default function Dashboard() {
                                             </button>
                                         </div>
                                     )}
+                                    {/* ── Activity Log Panel ───────────────────────────────────── */}
+                                    {expandedLogs === file.id && (
+                                        <div className="mt-4 bg-white/[0.02] border border-violet-500/15 rounded-xl overflow-hidden">
+                                            <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+                                                <p className="text-[10px] uppercase tracking-wider text-violet-400/80 font-bold flex items-center gap-1.5">
+                                                    <Activity size={11} /> Activity Log
+                                                </p>
+                                                <button
+                                                    onClick={() => {
+                                                        setFileLogs(prev => { const n = { ...prev }; delete n[file.id]; return n; });
+                                                        setExpandedLogs(null);
+                                                    }}
+                                                    className="text-[10px] text-white/20 hover:text-white/40 transition-colors"
+                                                >Refresh</button>
+                                            </div>
+
+                                            {logsLoading === file.id ? (
+                                                <div className="py-8 flex items-center justify-center gap-2 text-white/30 text-xs">
+                                                    <Loader2 size={14} className="animate-spin" /> Loading activity…
+                                                </div>
+                                            ) : !fileLogs[file.id] || fileLogs[file.id].length === 0 ? (
+                                                <div className="py-8 text-center text-white/20 text-xs">
+                                                    <Eye size={24} className="mx-auto mb-2 opacity-30" />
+                                                    No activity recorded yet
+                                                </div>
+                                            ) : (
+                                                <ul className="divide-y divide-white/[0.03] max-h-72 overflow-y-auto">
+                                                    {fileLogs[file.id].map((entry) => {
+                                                        const meta = EVENT_META[entry.event] ?? {
+                                                            icon: <Activity size={12} />,
+                                                            label: entry.event,
+                                                            color: 'text-white/40 bg-white/5 border-white/10',
+                                                        };
+                                                        return (
+                                                            <li key={entry.id} className="px-4 py-2.5 flex items-center gap-3 hover:bg-white/[0.02] transition-colors">
+                                                                <span className={`flex items-center justify-center w-6 h-6 rounded-md border shrink-0 ${meta.color}`}>
+                                                                    {meta.icon}
+                                                                </span>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-xs text-white/70 font-medium flex items-center gap-2">
+                                                                        {meta.label}
+                                                                        {entry.token && (
+                                                                            <span className="font-mono text-[10px] text-white/25 bg-white/5 px-1.5 py-0.5 rounded">
+                                                                                …{entry.token.slice(-8)}
+                                                                            </span>
+                                                                        )}
+                                                                    </p>
+                                                                    {entry.detail && (
+                                                                        <p className="text-[10px] text-white/30 mt-0.5 truncate">{entry.detail}</p>
+                                                                    )}
+                                                                </div>
+                                                                <span className="text-[10px] text-white/20 shrink-0">{timeAgo(entry.created_at)}</span>
+                                                            </li>
+                                                        );
+                                                    })}
+                                                </ul>
+                                            )}
+                                        </div>
+                                    )}
+
                                 </li>
                             ))}
                         </ul>

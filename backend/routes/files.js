@@ -6,6 +6,7 @@ const {
   uploadFile_,
   listFiles,
   deleteFileById,
+  getFileLogs,
 } = require('../controllers/filesController')
 
 // ─── POST /files/upload ───────────────────────────────────────────────────────
@@ -16,5 +17,8 @@ router.get('/', authenticateToken, listFiles)
 
 // ─── DELETE /files/:id ────────────────────────────────────────────────────────
 router.delete('/:id', authenticateToken, deleteFileById)
+
+// ─── GET /files/:id/logs ────────────────────────────────────────────────────
+router.get('/:id/logs', authenticateToken, getFileLogs)
 
 module.exports = router

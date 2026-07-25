@@ -4,6 +4,7 @@ const multer = require('multer')
 const crypto = require('crypto')
 const File = require('../models/File')
 const ShareLink = require('../models/ShareLink')
+const ActivityLog = require('../models/ActivityLog')
 const { log } = require('../logger')
 
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads')
@@ -141,4 +142,25 @@ const deleteFileById = async (req, res) => {
   }
 }
 
-module.exports = { upload, uploadFile_, listFiles, deleteFileById }
+// ─── GET /files/:id/logs ─────────────────────────────────────────────────────
+const getFileLogs = async (req, res) => {
+  try {
+    const fileRecord = await File.findById(req.params.id)
+    if (!fileRecord) return res.status(404).json({ error: 'File not found' })
+
+    if (fileRecord.user_id.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ error: 'Access denied' })
+    }
+
+    const logs = await ActivityLog.find({ file_id: req.params.id })
+      .sort({ created_at: -1 })
+      .limit(100)
+
+    res.json(logs)
+  } catch (error) {
+    console.error('[files/logs]', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+module.exports = { upload, uploadFile_, listFiles, deleteFileById, getFileLogs }
